@@ -1,0 +1,8 @@
+# Logs concerning the benchmarks
+logs/
+
+# Experimental data concerning the benchmarks
+experiments/*.csv
+table_script.py
+bench-2lce.sh
+bench-ilce.sh
