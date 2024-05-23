@@ -3,9 +3,10 @@
 
 import sys
 from lib import (arguments,
+    is_monomial,
     progress_bar,
 	sample_monomial_matrix,
-	oracle_call_lce,
+	oracle_call_ilce,
 	get_linear_system,
 )
 
@@ -23,11 +24,11 @@ def main(n, k, q):
     def setup():
         M = sample_monomial_matrix(n, q)
         print(f'\nSecret monomial matrix:\n{M}\n')
-        def LCE_oracle():
-            return oracle_call_lce(M, n, k, q)
-        return LCE_oracle
+        def ILCE_oracle():
+            return oracle_call_ilce(M, n, k, q)
+        return ILCE_oracle
 
-    LCE_oracle = setup()
+    ILCE_oracle = setup()
 
     preffix = identity_matrix(FiniteField(q), k)
     suffix  = identity_matrix(FiniteField(q), n - k)
@@ -35,14 +36,15 @@ def main(n, k, q):
     # Procedure starts below
     start = timer()
 
-    expected_calls = ceil((n**2) / (k * (n-k)))
+    expected_calls = ceil((n**2) / (2 * k * (n-k)))
     calls = 0
     linear_system = matrix(FiniteField(q), 0, n**2)
     for i in range(expected_calls):
         progress_bar(i, expected_calls, suffix='Building the system')
-        A, B = LCE_oracle()
+        A, B, C = ILCE_oracle()
         calls = calls + 1
         linear_system = linear_system.stack(get_linear_system(preffix, A, B, suffix))
+        linear_system = linear_system.stack(get_linear_system(preffix, C, A, suffix))
 
     progress_bar(expected_calls, expected_calls, suffix='Building the system\n')
     
@@ -51,7 +53,7 @@ def main(n, k, q):
     A_code = identity_matrix(FiniteField(q), k).augment(A, subdivide=False)
     for solution in kernel:
         M_ = matrix(n, n, solution)
-        if (M_.transpose() * M_).is_diagonal():
+        if is_monomial(M_, n):
             break
     end = timer() 
 
@@ -60,7 +62,7 @@ def main(n, k, q):
     print(f'Elapsed time (get linear sys):\t{middle - start} seconds')
     print(f'Elapsed time (recover matrix):\t{end - middle} seconds')
     print(f'Elapsed time (total):\t\t{end - start} seconds\n')
-    return (A_code * M_).rref()[:k,k:n] == B
+    return (A_code * M_).rref()[:k,k:n] == B and (A_code * (M_.inverse())).rref()[:k,k:n] == C
 
 if __name__ == '__main__':
 

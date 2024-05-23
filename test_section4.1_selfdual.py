@@ -7,14 +7,13 @@
 
 from lib import (
     sample_permutation_matrix,
-    sample_monomial_matrix,
-    algorithm,
+    algorithm_selfdual,
+    is_monomial,
 )
 
 # SageMath imports
 from sage.all import (
     matrix,
-    identity_matrix,
     FiniteField,
 )
 
@@ -28,32 +27,29 @@ def main(code, q, Parallel=False):
     print(f'\nOriginal code:\n{code}\n')
 
     def setup():
-        R = sample_monomial_matrix(n, q)
-        A_code = (code * R).rref()
-        while A_code[0:k,0:k] != identity_matrix(FiniteField(q), k, k):
-            R = sample_monomial_matrix(n, q)
-            A_code = (code * R).rref()
-
+        Gs = []
+        for _ in range(0, 2, 1):
+            Gs.append((code * sample_permutation_matrix(n, q)).rref())
+            assert(not Gs[-1] * Gs[-1].transpose()) # Is self-dual?
+        
         M = sample_permutation_matrix(n, q)
-        B_code = (A_code * M).rref()
-        C_code = (A_code * (M.inverse())).rref()
-        while B_code[0:k,0:k] != identity_matrix(FiniteField(q), k, k) or C_code[0:k,0:k] != identity_matrix(FiniteField(q), k, k) or B_code == C_code:
-            M = sample_permutation_matrix(n, q)
-            B_code = (A_code * M).rref()
-            C_code = (A_code * (M.inverse())).rref()
+        Gs_ = []
+        for i in range(0, 2, 1):
+            Gs_.append((Gs[i] * M).rref())
 
         print(f'\nSecret permutation matrix, Q:\n{M}\n')
-        return A_code[0:k,k:n], B_code[0:k,k:n], C_code[0:k,k:n]
+        return Gs, Gs_
 
-    M, M_, _M = setup()
-    G = identity_matrix(FiniteField(q), k).augment(M, subdivide=False)
+    Gs, Gs_ = setup()
+    
 	# Recover permutation matrix
-    P_ = algorithm(k, n, q, M, M_, _M, M, Parallel=Parallel)
-    if P_ is None:
+    Q_ = algorithm_selfdual(k, n, q, Gs[0], Gs_[0], Gs[1], Gs_[1], Parallel=Parallel)
+    if Q_ is None:
         return False
-    print(f'Recovered permutation matrix, Q\':\n{P_}')
+    
+    print(f'Recovered permutation matrix, Q\':\n{Q_}')
 	
-    return (G * P_).rref()[:k,k:n] == M_ and (G * (P_.transpose())).rref()[:k,k:n] == _M
+    return (Gs[0] * Q_).rref() == Gs_[0] and (Gs[1] * Q_).rref() == Gs_[1] and is_monomial(Q_, n)
 
 if __name__ == '__main__':
 
@@ -244,9 +240,9 @@ if __name__ == '__main__':
     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,6,3,0,2,1,4,2,4,2,5,0,3,1,1,1,4,0,5,2,0
     ])
 
-    n_tests = 25
+    n_tests = 100
 
-    for code in (code7_16,code7_24,code7_28):
+    for code in (code7_16,):
         success = 0
         failure = 0
         print(f'Running {n_tests} tests')

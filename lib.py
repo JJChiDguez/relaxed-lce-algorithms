@@ -274,13 +274,13 @@ def permutation_equations(n, q):
 
 
 # --------------------------------------------------------------
-def get_linear_system(prefix, g, g_, suffix, embed=lambda x: x):
-	return embed(prefix.augment(g, subdivide=False)).tensor_product(embed((-g_.transpose()).augment(suffix, subdivide=False)), subdivide=False)
+def get_linear_system(prefix, g, g_, suffix):
+	return prefix.augment(g, subdivide=False).tensor_product((-g_.transpose()).augment(suffix, subdivide=False), subdivide=False)
 
 
 # ------------------------------------------------------------------------
-def get_linear_system_transpose(prefix, g, g_, suffix, embed=lambda x: x):
-	return embed((-g.transpose()).augment(suffix, subdivide=False)).tensor_product(embed(prefix.augment(g_, subdivide=False)), subdivide=False)
+def get_linear_system_transpose(prefix, g, g_, suffix):
+	return (-g.transpose()).augment(suffix, subdivide=False).tensor_product(prefix.augment(g_, subdivide=False), subdivide=False)
 
 
 # -----------------------------------------------------
@@ -417,7 +417,6 @@ def algorithm(k, n, q, M, M_, N, N_, Parallel=False, bench=False):
 	number_of_guesses_per_row = number_of_guesses / n
 
 	if number_of_guesses > 2 * k * (n - k) or number_of_guesses == 0:
-		# number_of_guesses == 0 occurs for k != n/2 because of the two extra equations. In that setting we get rank equals 2k(n-k)
 		first = algorithm.count == 1
 		if bench:
 			to_csv_file_header(f'experiments/EXC_n{n}_q{q}.csv', label=first)
@@ -447,3 +446,191 @@ def algorithm(k, n, q, M, M_, N, N_, Parallel=False, bench=False):
 
 	return R
 
+
+##### Below code concerns solving self-dual 2-LCE/ILCE instances
+# -----------------------------------------------------
+def get_reduced_system_selfdual(n, k, q , system_, column, row=0):
+	to_delete = [(i * n + j) for i in range(0, n) for j in range(0, n) if (i == row or j == column)]
+	system_ij = system_[:,:-1].delete_columns(to_delete).augment(system_[:,-1] + system_[:,n*row + column], subdivide=False)
+	return system_ij
+
+
+# -------------------------------------
+def task_selfdual(n, k, q, system, row, column):
+	mtrx = get_reduced_system_selfdual(n, k, q , system, column, row=row)
+ 	# if mtrx.rank() < 2 * k * (n - k): # This equivalent to Rouché–Capelli Theorem but does not work for self-dual codes in general
+	if mtrx.rank() == mtrx[:,:-1].rank(): # Rouché–Capelli Theorem
+		return column
+	else:
+		return None
+
+
+# -------------------------------------------------------
+def solve_reduced_system_selfdual(n, k, q, M, M_, N, N_, columns):
+	# Concerning ILCE and 2LCE
+	assert(len(columns) == n)
+	size = sum([len(element) for element in columns])
+	assert(2 * k * (n - k) >= size)
+	PolyRing = PolynomialRing(FiniteField(q), size, names="x")
+	varsRing = [PolyRing.gen(i) for i in range(size)] + [1]
+	
+	Q = zero_matrix(PolyRing, n, n)
+	element = -1
+	for row in range(0, n, 1):
+		for column in columns[row]:
+			element += 1
+			Q[row, column] = varsRing[element]
+
+	Q11 = Q[:k,:k]
+	Q12 = Q[:k,k:]
+	Q21 = Q[k:,:k]
+	Q22 = Q[k:,k:]
+	reduced_system_eqs = Q12 + M * Q22 - Q11 * M_ - M * Q21 * M_
+	reduced_system_eqs = reduced_system_eqs.stack(Q12 + N * Q22 - Q11 * N_ - N * Q21 * N_)
+	reduced_system = zero_matrix(FiniteField(q), 2 * k * (n - k) + 1, size + 1)
+
+	row = -1
+	for i in range(0, 2 * k, 1):
+		for j in range(0, n - k, 1):
+			row += 1
+			coefs = reduced_system_eqs[i,j].coefficients()
+			monos = reduced_system_eqs[i,j].monomials()
+			positions = [varsRing.index(monos_k) for monos_k in monos]
+			for pos in range(0, len(positions), 1):
+				reduced_system[row, positions[pos]] = coefs[pos]
+
+	# add one extra equation determined by normalized monomial (non-entry of the first row is 1)
+	row += 1
+	equation = sum(Q[0]) - 1
+	coefs = equation.coefficients()
+	monos = equation.monomials()
+	positions = [varsRing.index(monos_k) for monos_k in monos]
+	for pos in range(0, len(positions), 1):
+		reduced_system[row, positions[pos]] = coefs[pos]
+	
+	# solve reduced system
+	kernel = reduced_system.right_kernel().matrix()
+	matrix_solution = zero_matrix(FiniteField(q), n, n)
+	for solution in kernel:
+		element = -1
+		matrix_solution = zero_matrix(FiniteField(q), n, n)
+		for row in range(0, n, 1):
+			for column in columns[row]:
+				element += 1
+				matrix_solution[row, column] = solution[element]
+		if is_monomial(matrix_solution, n):
+			break
+	
+	return matrix_solution
+
+
+# ----------------------------------------------------------------
+@counter
+def algorithm_selfdual(k, n, q, G1, G1_, G2, G2_, Parallel=False, bench=False):
+    # Instances analyzed are far from "truely" random (one one self-dual code).
+    # We can solve ILCE but 2-LCE we only infer some entries (with one guess). Probably two/[or more] guesses would allow the recovery for 2-LCE
+
+	print('\nPublic matrix code generators')
+	print(f'\nG₁:\n{G1}')
+	print(f'\nG₁\':\n{G1_}')
+
+	print(f'\nG₂:\n{G2}')
+	print(f'\nG₂\'\':\n{G2_}')
+
+	# Mapping to SF
+	T = sample_permutation_matrix(n, q)
+	A = [(Gi * T).rref() for Gi  in [G1, G2 ]]
+	B = [(Gi_* T).rref() for Gi_ in [G1_,G2_]]
+	while False in [Ai[:k,:k] == identity_matrix(FiniteField(q), k) for  Ai in A] or False in [Bi[:k,:k] == identity_matrix(FiniteField(q), k) for  Bi in B]:
+		T = sample_permutation_matrix(n, q)
+		A = [(Gi * T).rref() for Gi  in [G1, G2 ]]
+		B = [(Gi_* T).rref() for Gi_ in [G1_,G2_]]
+
+	M = A[0][:k,k:n]
+	N = A[1][:k,k:n]
+	M_= B[0][:k,k:n]
+	N_= B[1][:k,k:n]
+
+	# starting the monitoring
+	tracemalloc.start()
+	prefix = identity_matrix(FiniteField(q), k)
+	suffix = identity_matrix(FiniteField(q), n - k)
+
+	# Procedure starts below
+	time_start = timer()
+
+	system = matrix(FiniteField(q), 0, n**2)
+	system = system.stack(get_linear_system(prefix, M, M_, suffix))
+	system = system.stack(get_linear_system(prefix, N, N_, suffix))
+
+	# Add permutation equations
+	system = system.augment(zero_matrix(FiniteField(q), 2 * k * (n - k), 1))
+	row_system, col_system = permutation_equations(n, q)
+	system = system.stack(row_system)
+	system = system.stack(col_system)
+ 
+	columns = []
+
+	time_middle_1 = timer()
+	if not Parallel:
+		# Sequential approach (this is useful for debugging)
+		for row in range(0, n, 1):
+			# add one extra equation determined by normalized monomial (non-zero entry of the is assumed to be 1)
+			# system_ = system.stack(row_system[row])
+			columns.append([])
+			for guess in range(0, n, 1):
+				# add one extra equation determined by normalized monomial (non-zero entry of the is assumed to be 1)
+				if not task_selfdual(n, k, q, system, row, guess) is None:
+					columns[-1].append(guess)
+			print(f'{CYELLOW}[{row}]{CEND}: one column from the {CRED}{columns[-1]}{CEND}-th is different from zero')
+	else:
+		# Parallel approach
+		n_cores = mp.cpu_count()
+		print(f'\n#(total cores): {n_cores}')
+		with mp.Pool(n_cores // 2) as pool:
+			print(f'#(used cores):  {pool._processes}\n')
+			for row in range(0, n, 1):
+				# prepare arguments for reach call to target function
+				# add two extra equation determined by normalized monomial (non-zero entry of the is assumed to be 1)
+				inputs = [(n, k, q, system, row, guess) for guess in range(0, n, 1)]
+				# call the function for each item in parallel with multiple arguments
+				columns.append(list(filter(lambda input: not input is None, [result for result in pool.starmap(task_selfdual, inputs)])))
+				print(f'{CYELLOW}[{row}]{CEND}: one column from the {CRED}{columns[-1]}{CEND}-th is different from zero')
+
+	time_middle_2 = timer()
+	number_of_guesses = sum([len(column) for column in columns])
+	number_of_guesses_per_row = number_of_guesses / n
+
+	if number_of_guesses > 2 * k * (n - k) or number_of_guesses == 0:
+		first = algorithm.count == 1
+		if bench:
+			to_csv_file_header(f'experiments/EXC_n{n}_q{q}.csv', label=first)
+		# stopping the library
+		tracemalloc.stop()
+		return None
+
+	R = solve_reduced_system_selfdual(n, k, q, M, M_, N, N_, columns)
+	
+ 	# Map to original instance
+	R = T * R * (T.inverse())
+	
+	time_end = timer()
+	
+	mem_start, mem_peak = tracemalloc.get_traced_memory()
+	memory = (mem_peak - mem_start) / (1024.0 * 1024.0)
+	print(f'\nMemory usage:\t\t\t{memory} gigabytes')
+	print(f'Average #(variables per row):\t{number_of_guesses_per_row}')
+	print(f'Total number of variables:\t{number_of_guesses} = {number_of_guesses_per_row}⋅n')
+	print(f'Elapsed time (get linear sys):\t{time_middle_1 - time_start} seconds')
+	print(f'Elapsed time (filter process):\t{time_middle_2 - time_middle_1} seconds')
+	print(f'Elapsed time (recover matrix):\t{time_end - time_middle_2} seconds')
+	print(f'Elapsed time (total):\t\t{time_end - time_start} seconds\n')
+	
+	# stopping the library
+	tracemalloc.stop()
+	if bench:
+		runtime = time_end - time_start
+		first = algorithm.count == 1
+		to_csv_file(f'experiments/EXC_n{n}_q{q}.csv', {'n':n, 'q':q, '# variables':number_of_guesses, 'memory':memory, 'runtime':runtime}, label=first)
+
+	return R

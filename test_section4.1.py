@@ -6,7 +6,7 @@ import sys
 from lib import (
     arguments,
     sample_monomial_matrix,
-    oracle_call_ilce,
+    oracle_call_lce,
     algorithm,
 )
 
@@ -16,29 +16,27 @@ from sage.all import (
     FiniteField,
 )
 
-import itertools
-from timeit import default_timer as timer
-import multiprocessing as mp
 
 def main(n, k, q, Parallel=False, bench=False):
     def setup():
         Q = sample_monomial_matrix(n, q)
         print(f'\nSecret monomial matrix, Q:\n{Q}\n')
-        def ILCE_oracle():
-            return oracle_call_ilce(Q, n, k, q)
-        return ILCE_oracle
+        def LCE_oracle():
+            return oracle_call_lce(Q, n, k, q)
+        return LCE_oracle
 
-    ILCE_oracle = setup()
-    M, M_, _M = ILCE_oracle()
-
-    G = identity_matrix(FiniteField(q), k).augment(M, subdivide=False)
+    LCE_oracle = setup()
+    M, M_ = LCE_oracle()
+    G1 = identity_matrix(FiniteField(q), k).augment(M, subdivide=False)
+    N, N_ = LCE_oracle()
+    G2 = identity_matrix(FiniteField(q), k).augment(N, subdivide=False)
 	# Recover monomial matrix
-    Q_ = algorithm(k, n, q, M, M_, _M, M, Parallel=Parallel, bench=bench)
+    Q_ = algorithm(k, n, q, M, M_, N, N_, Parallel=Parallel, bench=bench)
     if Q_ is None:
         return False
     print(f'Recovered monomial matrix, Q\':\n{Q_}')
 	
-    return (G * Q_).rref()[:k,k:n] == M_ and (G * (Q_.inverse())).rref()[:k,k:n] == _M
+    return (G1 * Q_).rref()[:k,k:n] == M_ and (G2 * Q_).rref()[:k,k:n] == N_
 
 if __name__ == '__main__':
 
@@ -52,7 +50,7 @@ if __name__ == '__main__':
 	print(f'code length, n:\t\t{n}')
 	print(f'Field size, q:\t\t{q}\n')
 
-	n_tests = {True:10, False:1}[bench]
+	n_tests = {True:25, False:1}[bench]
 	success = 0
 	failure = 0
 

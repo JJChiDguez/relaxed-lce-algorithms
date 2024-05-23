@@ -6,14 +6,14 @@
 # ++++++++++
 
 from lib import (
-    sample_monomial_matrix,
-    algorithm,
+    sample_permutation_matrix,
+	algorithm_selfdual,
+    is_monomial,
 )
 
 # SageMath imports
 from sage.all import (
     matrix,
-    identity_matrix,
     FiniteField,
 )
 
@@ -27,39 +27,25 @@ def main(code, q, Parallel=False):
     print(f'\nOriginal code:\n{code}\n')
 
     def setup():
-        R = sample_monomial_matrix(n, q)
-        A_code = (code * R).rref()
-        while A_code[0:k,0:k] != identity_matrix(FiniteField(q), k, k):
-            R = sample_monomial_matrix(n, q)
-            A_code = (code * R).rref()
-
-        R = sample_monomial_matrix(n, q)
-        C_code = (code * R).rref()
-        while C_code[0:k,0:k] != identity_matrix(FiniteField(q), k, k):
-            R = sample_monomial_matrix(n, q)
-            C_code = (code * R).rref()
-
-        M = sample_monomial_matrix(n, q)
+        A_code = (code * sample_permutation_matrix(n, q)).rref()
+        assert(not A_code * A_code.transpose()) # Is self-dual?
+        
+        M = sample_permutation_matrix(n, q)
         B_code = (A_code * M).rref()
-        D_code = (A_code * M).rref()
-        while B_code[0:k,0:k] != identity_matrix(FiniteField(q), k, k) or D_code[0:k,0:k] != identity_matrix(FiniteField(q), k, k) or B_code == D_code:
-            M = sample_monomial_matrix(n, q)
-            B_code = (A_code * M).rref()
-            D_code = (C_code * M).rref()
+        C_code = (A_code * (M.inverse())).rref()
 
-        print(f'\nSecret monomial matrix, Q:\n{M}\n')
-        return A_code[0:k,k:n], B_code[0:k,k:n], C_code[0:k,k:n], D_code[0:k,k:n]
+        print(f'\nSecret permutation matrix, Q:\n{M}\n')
+        return A_code, B_code, C_code
 
-    M, M_, N, N_ = setup()
-    G1 = identity_matrix(FiniteField(q), k).augment(M, subdivide=False)
-    G2 = identity_matrix(FiniteField(q), k).augment(N, subdivide=False)
-	# Recover monomial matrix
-    Q_ = algorithm(k, n, q, M, M_, N, N_, Parallel=Parallel)
+    G0, G1, G2 = setup()
+
+	# Recover permutation matrix
+    Q_ = algorithm_selfdual(k, n, q, G0, G1, G2, G0, Parallel=Parallel)
     if Q_ is None:
         return False
-    print(f'Recovered monomial matrix, Q\':\n{Q_}')
+    print(f'Recovered permutation matrix, Q\':\n{Q_}')
 	
-    return (G1 * Q_).rref()[:k,k:n] == M_ and (G2 * Q_).rref()[:k,k:n] == N_
+    return (G0 * Q_).rref() == G1 and (G0 * (Q_.inverse())).rref() == G2 and is_monomial(Q_, n)
 
 if __name__ == '__main__':
 
@@ -250,9 +236,9 @@ if __name__ == '__main__':
     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,6,3,0,2,1,4,2,4,2,5,0,3,1,1,1,4,0,5,2,0
     ])
 
-    n_tests = 25
+    n_tests = 100
 
-    for code in (code7_16,code7_24,code7_28):
+    for code in (code7_16,):
         success = 0
         failure = 0
         print(f'Running {n_tests} tests')

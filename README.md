@@ -25,34 +25,32 @@ options:
   -b, --benchmark       Benchmark
 ```
 
-
 ## The following scripts correspond to Section 3
 
 ```bash
+sage -python test_lemma1.py -n CODE_SIZE_N -k CODE_DIMENSION -q PRIME
 sage -python test_lemma2.py -n CODE_SIZE_N -k CODE_DIMENSION -q PRIME
-sage -python test_corollary2b.py -m CODE_SIZE_M -n CODE_SIZE_N -k CODE_DIMENSION -q PRIME
-
-sage -python test_lemma3.py -n CODE_SIZE_N -k CODE_DIMENSION -q PRIME
-sage -python test_corollary4b.py -m CODE_SIZE_M -n CODE_SIZE_N -k CODE_DIMENSION -q PRIME
+sage -python test_corollary1.py -m CODE_SIZE_M -n CODE_SIZE_N -k CODE_DIMENSION -q PRIME
+sage -python test_corollary2.py -m CODE_SIZE_M -n CODE_SIZE_N -k CODE_DIMENSION -q PRIME
 ```
-
 
 ## The following scripts correspond to Section 4
 
 ```bash
-sage -python test_theorem1.py -n CODE_SIZE_N -q PRIME
-sage -python test_theorem1_selfdual.py -n CODE_SIZE_N -q PRIME
+sage -python test_section4.1.py -n CODE_SIZE_N -q PRIME
 
-sage -python test_theorem2.py -n CODE_SIZE_N -q PRIME
-sage -python test_theorem2_IPCE.py -n CODE_SIZE_N -q PRIME
-sage -python test_theorem2_selfdual.py -n CODE_SIZE_N -q PRIME
-sage -python test_theorem2_seldual_IPCE.py -n CODE_SIZE_N -q PRIME
+# Below example correspond with self-dual 2-PCE instances
+sage -python test_section4.1_selfdual.py
+
+sage -python test_section4.2.py -n CODE_SIZE_N -q PRIME
+
+# Below example correspond with self-dual IPCE instances
+sage -python test_section4.2_selfdual.py
 ```
-
 
 ## Remarks
 
-The flag option `-b` creates a file with extension .CSV, which includes data concerning ten random executions.
+The flag option `-b` creates a file with extension `.CSV`, which includes data concerning 25 random executions.
 
 
 ## License
