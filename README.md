@@ -48,6 +48,23 @@ sage -python test_section4.2.py -n CODE_SIZE_N -q PRIME
 sage -python test_section4.2_selfdual.py
 ```
 
+### Concerning the experimental validation of the assumptions
+
+```bash
+% sage -python test_assumptions.py -h
+usage: test_assumptions.py [-h] -mode MODE -n N -k K -q Q -N N
+
+Process some integers.
+
+options:
+  -h, --help  show this help message and exit
+  -mode MODE  Mode to run (e.g., LCE or ILCE)
+  -n N        Code lengtht n
+  -k K        Code dimension k
+  -q Q        Modulo q
+  -N N        Number of trials N
+```
+
 ## Remarks
 
 The flag option `-b` creates a file with extension `.CSV`, which includes data concerning 25 random executions.
